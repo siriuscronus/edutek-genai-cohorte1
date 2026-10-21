@@ -1,0 +1,32 @@
+[
+  {
+    "id": "E-001",
+    "texto": "Mi cuenta está bloqueada después de varios intentos de contraseña. Internet funciona, pero no puedo iniciar sesión.",
+    "categoria_esperada": "accesos"
+  },
+  {
+    "id": "E-002",
+    "texto": "Todos los equipos del segundo piso perdieron conectividad. El enlace del switch aparece caído.",
+    "categoria_esperada": "red"
+  },
+  {
+    "id": "E-003",
+    "texto": "La aplicación de inventario se cierra al exportar a Excel. Puedo seguir consultando productos.",
+    "categoria_esperada": "software"
+  },
+  {
+    "id": "E-004",
+    "texto": "El almacenamiento compartido está lleno y veinte usuarios no pueden guardar archivos.",
+    "categoria_esperada": "hardware"
+  },
+  {
+    "id": "E-005",
+    "texto": "Puedo conectarme a la VPN, pero el repositorio indica que no tengo permisos de lectura.",
+    "categoria_esperada": "accesos"
+  },
+  {
+    "id": "E-006",
+    "texto": "Solicito información sobre el procedimiento para reservar una sala de reuniones.",
+    "categoria_esperada": "otro"
+  }
+]

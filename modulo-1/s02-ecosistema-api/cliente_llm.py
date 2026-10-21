@@ -719,3 +719,105 @@ def pedir_json(
         except ValidationError as exc:
             ultimo_error = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
     raise ValueError(f"No se obtuvo JSON válido tras {max_intentos} intentos. Último error: {ultimo_error}")
+
+
+# EDUTEK_GEMINI_ADAPTER_V1
+_llamar_openai_original = llamar_openai
+
+def llamar_openai(
+    prompt, modelo=None, system=None, max_tokens=1024,
+    streaming=True, al_recibir_texto=None, max_reintentos=2,
+    cliente=None, api_key=None, esfuerzo="minimo",
+    temperature=None, top_p=None, top_k=None, cache=False,
+    **extra,
+):
+    destino = os.getenv("OPENAI_BASE_URL", "")
+    if "generativelanguage.googleapis.com" not in destino:
+        return _llamar_openai_original(
+            prompt, modelo=modelo, system=system,
+            max_tokens=max_tokens, streaming=streaming,
+            al_recibir_texto=al_recibir_texto,
+            max_reintentos=max_reintentos, cliente=cliente,
+            api_key=api_key, esfuerzo=esfuerzo,
+            temperature=temperature, top_p=top_p,
+            top_k=top_k, cache=cache, **extra,
+        )
+
+    nombre = (modelo or modelo_economico("openai")).removeprefix("models/")
+    cliente = cliente or openai.OpenAI(
+        api_key=api_key or os.environ["OPENAI_API_KEY"],
+        base_url=destino, max_retries=0, timeout=90,
+    )
+    mensajes = (
+        [{"role": "user", "content": prompt}]
+        if isinstance(prompt, str) else list(prompt)
+    )
+    if system:
+        mensajes.insert(0, {"role": "system", "content": system})
+
+    params = dict(
+        model=nombre, messages=mensajes,
+        max_tokens=max_tokens, stream=streaming,
+    )
+    if nombre.startswith("gemini-2.5-flash"):
+        params["reasoning_effort"] = "none"
+    if temperature is not None:
+        params["temperature"] = temperature
+    if top_p is not None:
+        params["top_p"] = top_p
+    if streaming:
+        params["stream_options"] = {"include_usage": True}
+
+    def una_llamada():
+        inicio = time.perf_counter()
+        ttft = None
+        partes = []
+        uso = None
+        motivo = None
+
+        if streaming:
+            with cliente.chat.completions.create(**params) as flujo:
+                for fragmento in flujo:
+                    if fragmento.usage is not None:
+                        uso = fragmento.usage
+                    if not fragmento.choices:
+                        continue
+                    opcion = fragmento.choices[0]
+                    texto = opcion.delta.content or ""
+                    motivo = opcion.finish_reason or motivo
+                    if texto:
+                        if ttft is None:
+                            ttft = time.perf_counter() - inicio
+                        partes.append(texto)
+                        if al_recibir_texto:
+                            al_recibir_texto(texto)
+        else:
+            respuesta = cliente.chat.completions.create(**params)
+            partes = [respuesta.choices[0].message.content or ""]
+            uso = respuesta.usage
+            motivo = respuesta.choices[0].finish_reason
+
+        if uso is None:
+            raise RuntimeError(
+                "Gemini returned no usage data. Metrics are unavailable."
+            )
+
+        return ResultadoLLM(
+            texto="".join(partes),
+            modelo=nombre,
+            tokens_entrada=uso.prompt_tokens,
+            tokens_salida=uso.completion_tokens,
+            segundos_total=time.perf_counter() - inicio,
+            ttft=ttft,
+            stop_reason={
+                "stop": "end_turn", "length": "max_tokens"
+            }.get(motivo, motivo),
+            costo=float("nan"),
+            proveedor="gemini",
+        )
+
+    resultado, intentos = con_reintentos(
+        una_llamada, max_reintentos=max_reintentos
+    )
+    resultado.intentos = intentos
+    return resultado

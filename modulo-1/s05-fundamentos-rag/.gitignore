@@ -1,0 +1,6 @@
+
+# Local ONNX embedding models
+modelos/
+
+# Local notebook backups
+backups/
